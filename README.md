@@ -1,33 +1,31 @@
 # 📊 Cash Flow Forecasting Dashboard
 
-Dashboard académique interactif pour l'analyse et la prévision de flux de trésorerie.
+Dashboard académique interactif pour l'analyse et la prévision de flux de trésorerie avec analyse de risques multi-devises.
 
-## 🚀 Déploiement Rapide
+## 🚀 Démarrage Rapide
 
-### Option 1 : Local
+### Local
 ```bash
 cd deliverables/Python
 pip install -r requirements.txt
 streamlit run cash_forecast_complete.py
 ```
 
-### Option 2 : Streamlit Cloud
-Voir `deliverables/Python/DEPLOY_STREAMLIT.md` pour les instructions complètes.
+### Déploiement
+Voir `docs/DEPLOY_GUIDE.md` pour les instructions complètes.
 
 ## 📁 Structure du Projet
 
 ```
 capstone/
-├── deliverables/
-│   ├── Python/
-│   │   ├── cash_forecast_complete.py    # Script principal
-│   │   ├── requirements.txt              # Dépendances
-│   │   └── .streamlit/
-│   │       └── config.toml               # Configuration Streamlit
-│   ├── bank_transactions.csv            # Données bancaires
-│   ├── sales_invoices.csv               # Factures clients
-│   └── purchase_invoices.csv            # Factures fournisseurs
-└── README.md
+├── deliverables/          # Fichiers de livraison
+│   ├── Python/           # Code source principal
+│   ├── *.csv            # Données (transactions, factures)
+│   └── bdd/             # Résultats de forecast
+├── docs/                 # Documentation
+├── scripts/              # Scripts de déploiement
+├── cours/                # Matériel de cours
+└── biblio/               # Bibliographie
 ```
 
 ## 📋 Prérequis
@@ -44,6 +42,11 @@ pip install -r deliverables/Python/requirements.txt
 
 ## 📚 Documentation
 
-- Guide de déploiement : `deliverables/Python/DEPLOY_STREAMLIT.md`
-- Guide rapide : `deliverables/Python/README_DEPLOY.md`
+- Guide de déploiement : `docs/DEPLOY_GUIDE.md`
+- Documentation Python : `deliverables/Python/README_DASHBOARD.md`
 
+## 🌐 Déploiement en Ligne
+
+Le projet est déployé sur Streamlit Cloud :
+- Repository GitHub : `prizksaad-stack/cash-flow-forecast`
+- Documentation : Voir `docs/DEPLOY_GUIDE.md`

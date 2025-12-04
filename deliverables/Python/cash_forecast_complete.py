@@ -1,7 +1,7 @@
 """
 Cash Forecasting Analysis - Script Complet avec Dashboard
 Analyse complète selon le brief : nettoyage, classification, saisonnalité, forecast quotidien, détection de risques
-+ Dashboard interactif académique
++ Dashboard interactif professionnel
 
 Usage:
     - Mode Dashboard (par défaut): python cash_forecast_complete.py
@@ -99,9 +99,9 @@ bdd_dir = root / 'bdd'  # bdd/ dans deliverables/
 MAX_FORECAST_DATE = datetime(2025, 3, 31).date()
 
 # ============================================================================
-# PARAMÈTRES CLIENT (selon PDF Capstone)
+# PARAMÈTRES CLIENT (selon spécifications)
 # ============================================================================
-# Dette selon PDF : €20M à taux variable (Euribor 3M + 1.2%)
+# Dette selon spécifications : €20M à taux variable (Euribor 3M + 1.2%)
 DEBT_PRINCIPAL = 20_000_000  # €20M
 DEBT_SPREAD = 0.012  # 1.2% spread
 # Euribor 3M actuel (estimation basée sur marché 2024) - à mettre à jour avec taux réel
@@ -288,7 +288,7 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
     else:
         avg_monthly_recurring = 0
     
-    # AJOUTER les intérêts de la dette €20M (selon PDF) si pas déjà inclus dans les données
+    # AJOUTER les intérêts de la dette €20M (selon spécifications) si pas déjà inclus dans les données
     # IMPORTANT: S'assurer que les intérêts de la dette €20M sont TOUJOURS inclus dans avg_monthly_recurring
     # Vérifier si les intérêts de la dette sont déjà dans les transactions
     loan_interest_in_data = bank_recurring[bank_recurring['category'] == 'Loan Interest']['amount_eur'].sum() if len(bank_recurring) > 0 and 'Loan Interest' in bank_recurring['category'].values else 0
@@ -301,7 +301,7 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
     
     # IMPORTANT: S'assurer que les intérêts de la dette €20M sont TOUJOURS inclus
     # Si les intérêts dans les données sont significativement inférieurs à DEBT_MONTHLY_INTEREST,
-    # ajouter la différence pour refléter la dette de €20M selon le PDF
+    # ajouter la différence pour refléter la dette de €20M selon les spécifications
     # On utilise un seuil de 50% pour éviter les doublons si les données contiennent déjà les intérêts
     if avg_loan_interest_per_month < DEBT_MONTHLY_INTEREST * 0.5:  # Si moins de 50% des intérêts attendus
         # Les intérêts de la dette €20M ne sont pas complètement reflétés dans les données
@@ -449,7 +449,7 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
             debit_jpy_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'JPY')]['amount'].sum()
             
             # Proportions par devise
-            prop_credit_eur = credit_eur_hist / total_credit_hist if total_credit_hist > 0 else 0.86  # 86% par défaut (selon PDF)
+            prop_credit_eur = credit_eur_hist / total_credit_hist if total_credit_hist > 0 else 0.86  # 86% par défaut (selon spécifications)
             prop_credit_usd = credit_usd_hist / total_credit_hist if total_credit_hist > 0 else 0.04  # 4% par défaut
             prop_credit_jpy = credit_jpy_hist / total_credit_hist if total_credit_hist > 0 else 0.14  # 14% par défaut
             
@@ -457,7 +457,7 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
             prop_debit_usd = debit_usd_hist / total_debit_hist if total_debit_hist > 0 else 0.04
             prop_debit_jpy = debit_jpy_hist / total_debit_hist if total_debit_hist > 0 else 0.14
         else:
-            # Valeurs par défaut selon PDF (EUR 86%, USD 4%, JPY 14%)
+            # Valeurs par défaut selon spécifications (EUR 86%, USD 4%, JPY 14%)
             prop_credit_eur = prop_debit_eur = 0.86
             prop_credit_usd = prop_debit_usd = 0.04
             prop_credit_jpy = prop_debit_jpy = 0.14
@@ -648,7 +648,7 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
 if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
     # Configuration de la page
     st.set_page_config(
-        page_title="Cash Flow Forecasting - Dashboard Académique",
+        page_title="Cash Flow Forecasting - Dashboard Professionnel",
         page_icon="📊",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -707,7 +707,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div class="main-header">📊 Cash Flow Forecasting - Dashboard Académique</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">📊 Cash Flow Forecasting - Dashboard Professionnel</div>', unsafe_allow_html=True)
     
     # Sidebar
     st.sidebar.title("📑 Navigation")
@@ -715,7 +715,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         "Choisir une section:",
         [
             "🏠 Vue d'ensemble",
-            "📚 Méthodes Académiques",
+            "📚 Méthodes & Théorie",
             "🔢 Calculs Détailés",
             "📈 Visualisations",
             "⚙️ Paramètres & Facteurs",
@@ -862,8 +862,8 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         for step_num, step_desc in steps:
             st.markdown(f'<div class="step-box"><strong>{step_num}</strong> {step_desc}</div>', unsafe_allow_html=True)
     
-    elif section == "📚 Méthodes Académiques":
-        st.markdown('<div class="section-header">📚 Méthodes Académiques de Cash Flow Forecasting</div>', unsafe_allow_html=True)
+    elif section == "📚 Méthodes & Théorie":
+        st.markdown('<div class="section-header">📚 Méthodes de Cash Flow Forecasting</div>', unsafe_allow_html=True)
         
         # DSO
         st.markdown("### 1️⃣ DSO (Days Sales Outstanding) - Délai de Recouvrement")
@@ -871,7 +871,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         col1, col2 = st.columns([2, 1])
         with col1:
             st.markdown("""
-            **Définition académique:**
+            **Définition:**
             Le DSO mesure le nombre moyen de jours nécessaires pour recouvrer les créances clients.
             C'est un indicateur clé de la gestion de trésorerie.
             """)
@@ -900,7 +900,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         col1, col2 = st.columns([2, 1])
         with col1:
             st.markdown("""
-            **Définition académique:**
+            **Définition:**
             Le DPO mesure le nombre moyen de jours avant de payer les fournisseurs.
             Un DPO élevé améliore la trésorerie mais peut affecter les relations.
             """)
@@ -927,7 +927,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         st.markdown("### 3️⃣ Direct Method (Méthode Directe)")
         
         st.markdown("""
-        **Principe académique:**
+        **Principe:**
         La méthode directe prévoit les flux de trésorerie en analysant chaque transaction individuellement.
         """)
         
@@ -971,7 +971,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         
         with col2:
             st.markdown("""
-            **Justification académique:**
+            **Justification:**
             - Les transactions récurrentes sont prévisibles (salaires, intérêts)
             - Les transactions non-récurrentes nécessitent une analyse spécifique
             - Cette classification améliore la précision du forecast
@@ -1080,7 +1080,7 @@ dso_mean = sales_paid['days_to_pay'].mean()
                     if negative_days > 0:
                         st.warning(f"⚠️ {negative_days} factures avec jours négatifs (payment_date avant issue_date)")
             
-            st.markdown("**Justification académique et méthodologique:**")
+            st.markdown("**Justification méthodologique:**")
             st.info("""
             **Pourquoi utiliser les factures payées ?**
             - ✅ Les factures payées reflètent le comportement RÉEL des clients (pas théorique)
@@ -1192,7 +1192,7 @@ dpo_mean = purchase_paid['days_to_pay'].mean()
                     if negative_days > 0:
                         st.warning(f"⚠️ {negative_days} factures avec jours négatifs (payment_date avant issue_date)")
             
-            st.markdown("**Justification académique et méthodologique:**")
+            st.markdown("**Justification méthodologique:**")
             st.info("""
             **Pourquoi utiliser les factures payées ?**
             - ✅ Les factures payées reflètent les délais RÉELS négociés avec les fournisseurs
@@ -1328,7 +1328,7 @@ else:
                         st.metric("Inflation Annuelle Utilisée", f"{inflation_rate*100:.2f}%")
                     
                     with col2:
-                        st.markdown("**Justification académique et méthodologique:**")
+                        st.markdown("**Justification méthodologique:**")
                         st.info("""
                         **Pourquoi filtrer uniquement les coûts récurrents ?**
                         - ✅ Les coûts récurrents (salaires, fournisseurs, intérêts) sont affectés par l'inflation
@@ -1453,7 +1453,7 @@ volume_volatility_debit = std_daily_debit / avg_daily_debit if avg_daily_debit >
                 st.metric("Écart-type", f"{std_daily_debit:,.2f} EUR")
                 st.metric("Volatilité", f"{volume_volatility_debit*100:.1f}%")
             
-            st.markdown("**Justification académique et méthodologique:**")
+            st.markdown("**Justification méthodologique:**")
             st.info("""
             **Pourquoi utiliser le coefficient de variation ?**
             - ✅ Permet de comparer la volatilité indépendamment de l'échelle (montant moyen)
@@ -1615,7 +1615,7 @@ default_rate = max(0.01, min(default_rate_calculated, 0.05))  # Entre 1% et 5%
                 st.metric("Taux calculé", f"{default_rate_calculated*100:.2f}%")
                 st.metric("Taux utilisé (conservateur)", f"{default_rate*100:.1f}%")
             
-            st.markdown("**Justification académique et méthodologique:**")
+            st.markdown("**Justification méthodologique:**")
             st.info("""
             **Pourquoi utiliser des heuristiques ?**
             - ⚠️ **Problème :** Pas de données réelles d'impayés dans les fichiers fournis
@@ -1704,7 +1704,7 @@ overdue_rate_purchase = purchase_overdue_count / len(purchase) if len(purchase) 
                 st.metric("Factures en retard", purchase_overdue_count)
                 st.metric("Taux de retard", f"{overdue_rate_purchase*100:.2f}%")
             
-            st.markdown("**Justification académique et méthodologique:**")
+            st.markdown("**Justification méthodologique:**")
             st.info("""
             **Pourquoi mesurer les retards de paiement ?**
             - ✅ Indicateur de santé financière et de gestion de trésorerie
@@ -1803,7 +1803,7 @@ fx_volatility_jpy = 0.12  # ~12% volatilité annuelle JPY/EUR
             with col2:
                 st.metric("JPY/EUR", f"{fx_rates.get('JPY', 0.0065):.6f}")
             
-            st.markdown("**Justification académique et méthodologique:**")
+            st.markdown("**Justification méthodologique:**")
             st.info("""
             **Pourquoi mesurer la volatilité FX ?**
             - ✅ Permet d'estimer le risque de change sur les encaissements/décaissements en devises étrangères
@@ -1974,7 +1974,7 @@ for day in range(forecast_days_count):
             - `currency` : Pour gestion multi-devises
             """)
             
-            st.markdown("**Justification académique:**")
+            st.markdown("**Justification:**")
             st.info("""
             Le forecast quotidien combine:
             1. **Moyennes historiques** (baseline prévisible) - ajustées selon jour de la semaine
@@ -3259,7 +3259,7 @@ for day in range(forecast_days_count):
         st.markdown('<div class="section-header">📊 Scénarios & Analyse des Risques</div>', unsafe_allow_html=True)
         
         st.markdown("""
-        ### 📋 Conformité avec les Exigences du PDF Capstone
+        ### 📋 Conformité avec les Exigences du Projet
         
         Cette section implémente les analyses de risques et scénarios demandés dans le projet :
         - **Dette €20M** à taux variable (Euribor 3M + 1.2%)
@@ -3272,11 +3272,11 @@ for day in range(forecast_days_count):
         # ========================================================================
         # DETTE €20M - CALCUL EXPLICITE
         # ========================================================================
-        st.markdown("### 💰 Dette Identifiée (selon PDF)")
+        st.markdown("### 💰 Dette Identifiée (selon spécifications)")
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Principal", f"{DEBT_PRINCIPAL:,.0f} EUR", help="Dette totale selon PDF")
+            st.metric("Principal", f"{DEBT_PRINCIPAL:,.0f} EUR", help="Dette totale selon spécifications")
         with col2:
             st.metric("Taux Variable", f"{DEBT_INTEREST_RATE*100:.2f}%", 
                      help=f"Euribor 3M ({EURIBOR_3M_BASE*100:.2f}%) + Spread ({DEBT_SPREAD*100:.2f}%)")
@@ -3353,7 +3353,7 @@ for day in range(forecast_days_count):
         st.markdown("### 📈 Simulation Chocs de Taux d'Intérêt (±100bp)")
         
         st.markdown("""
-        Selon le PDF, il faut simuler l'impact de variations de ±100bp (1%) sur le taux Euribor 3M.
+        Selon les spécifications, il faut simuler l'impact de variations de ±100bp (1%) sur le taux Euribor 3M.
         """)
         
         col1, col2 = st.columns(2)
@@ -3465,7 +3465,7 @@ for day in range(forecast_days_count):
         st.markdown("### 💡 Recommandations Investissement & Financement")
         
         st.markdown("""
-        **Selon le PDF, il faut optimiser les placements de trésorerie et les stratégies de financement.**
+        **Selon les spécifications, il faut optimiser les placements de trésorerie et les stratégies de financement.**
         """)
         
         # Afficher les recommandations basées sur le forecast si disponible
@@ -3526,7 +3526,7 @@ for day in range(forecast_days_count):
             st.warning("💡 Lancez d'abord le forecast dans la section '🎯 Lancer Forecast' pour des recommandations personnalisées")
         
         st.markdown("""
-        **📚 Références Académiques (selon PDF):**
+        **📚 Références & Documentation:**
         - J.P. Morgan (2024) : Best practices en gestion de trésorerie
         - Roy et al. (2025) : Modèles de forecast avancés
         - Fitranita et al. (2024) : Optimisation placements/financements
@@ -3538,7 +3538,7 @@ for day in range(forecast_days_count):
     st.markdown("---")
     st.markdown("""
     <div id="dashboard-footer" style='text-align: center; color: #666; padding: 2rem; background-color: #f8f9fa; border-top: 2px solid #dee2e6; margin-top: 2rem;'>
-        <p style='margin: 0.5rem 0;'><strong>Dashboard Académique - Cash Flow Forecasting</strong></p>
+        <p style='margin: 0.5rem 0;'><strong>Dashboard Professionnel - Cash Flow Forecasting</strong></p>
         <p style='margin: 0.5rem 0; font-size: 0.9em;'>Méthode Directe | DSO/DPO | Multi-Devises | Analyse de Risques</p>
     </div>
     """, unsafe_allow_html=True)
