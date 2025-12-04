@@ -256,18 +256,37 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
     # La dette de 20M EUR est un passif qui n'affecte pas directement le cash flow,
     # mais ses intérêts mensuels sont déduits dans les décaissements récurrents
     bank_until_start = bank[bank['date'].dt.date < start_date]
+    
+    # IMPORTANT: S'assurer que amount_eur existe (calculé si nécessaire)
+    if 'amount_eur' not in bank_until_start.columns and len(bank_until_start) > 0:
+        bank_until_start['amount_eur'] = bank_until_start.apply(
+            lambda x: convert_to_eur(x.get('amount', 0), x.get('currency', 'EUR'), fx_rates, x.get('date')), 
+            axis=1
+        )
+    
+    # Définir les taux de change (utilisés dans toute la boucle)
+    usd_rate = fx_rates.get('USD', 0.92) if fx_rates and 'USD' in fx_rates else 0.92
+    jpy_rate = fx_rates.get('JPY', 0.0065) if fx_rates and 'JPY' in fx_rates else 0.0065
+    
     if len(bank_until_start) > 0:
-        initial_balance_eur = bank_until_start[bank_until_start['currency'] == 'EUR']['amount'].sum()
-        initial_balance_usd = bank_until_start[bank_until_start['currency'] == 'USD']['amount'].sum()
-        initial_balance_jpy = bank_until_start[bank_until_start['currency'] == 'JPY']['amount'].sum()
-        # Conversion en EUR avec gestion des cas limites
-        # IMPORTANT: Ces taux sont utilisés dans toute la boucle de forecast
-        usd_rate = fx_rates.get('USD', 0.92) if fx_rates and 'USD' in fx_rates else 0.92
-        jpy_rate = fx_rates.get('JPY', 0.0065) if fx_rates and 'JPY' in fx_rates else 0.0065
-        initial_balance_total = initial_balance_eur + (initial_balance_usd * usd_rate) + (initial_balance_jpy * jpy_rate)
-        
-        # Stocker les taux pour utilisation dans la boucle
-        # (déjà définis ci-dessus, mais on s'assure qu'ils sont accessibles)
+        # IMPORTANT: Utiliser amount_eur si disponible (déjà converti en EUR), sinon convertir depuis amount
+        if 'amount_eur' in bank_until_start.columns:
+            # Utiliser amount_eur qui est déjà converti en EUR pour le total
+            initial_balance_eur = bank_until_start[(bank_until_start['currency'] == 'EUR')]['amount_eur'].sum() if len(bank_until_start[bank_until_start['currency'] == 'EUR']) > 0 else 0
+            initial_balance_usd_eur = bank_until_start[(bank_until_start['currency'] == 'USD')]['amount_eur'].sum() if len(bank_until_start[bank_until_start['currency'] == 'USD']) > 0 else 0
+            initial_balance_jpy_eur = bank_until_start[(bank_until_start['currency'] == 'JPY')]['amount_eur'].sum() if len(bank_until_start[bank_until_start['currency'] == 'JPY']) > 0 else 0
+            initial_balance_total = initial_balance_eur + initial_balance_usd_eur + initial_balance_jpy_eur
+            
+            # Pour les cumuls par devise, on a besoin des montants originaux (pas convertis)
+            initial_balance_usd = bank_until_start[bank_until_start['currency'] == 'USD']['amount'].sum() if len(bank_until_start[bank_until_start['currency'] == 'USD']) > 0 else 0
+            initial_balance_jpy = bank_until_start[bank_until_start['currency'] == 'JPY']['amount'].sum() if len(bank_until_start[bank_until_start['currency'] == 'JPY']) > 0 else 0
+        else:
+            # Fallback : convertir depuis amount original
+            initial_balance_eur = bank_until_start[bank_until_start['currency'] == 'EUR']['amount'].sum() if len(bank_until_start[bank_until_start['currency'] == 'EUR']) > 0 else 0
+            initial_balance_usd = bank_until_start[bank_until_start['currency'] == 'USD']['amount'].sum() if len(bank_until_start[bank_until_start['currency'] == 'USD']) > 0 else 0
+            initial_balance_jpy = bank_until_start[bank_until_start['currency'] == 'JPY']['amount'].sum() if len(bank_until_start[bank_until_start['currency'] == 'JPY']) > 0 else 0
+            # Conversion en EUR
+            initial_balance_total = initial_balance_eur + (initial_balance_usd * usd_rate) + (initial_balance_jpy * jpy_rate)
     else:
         initial_balance_eur = initial_balance_usd = initial_balance_jpy = initial_balance_total = 0
     
@@ -403,16 +422,32 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
         sales_day_eur = sales_day_usd = sales_day_jpy = 0
         purchase_day_eur = purchase_day_usd = purchase_day_jpy = 0
         
+        # Récupérer les taux de change (déjà définis plus haut, mais on s'assure qu'ils sont accessibles)
+        usd_rate = fx_rates.get('USD', 0.92) if fx_rates and 'USD' in fx_rates else 0.92
+        jpy_rate = fx_rates.get('JPY', 0.0065) if fx_rates and 'JPY' in fx_rates else 0.0065
+        
         if len(sales_open) > 0 and 'payment_date' in sales_open.columns:
             sales_day_df = sales_open[sales_open['payment_date'] == forecast_date]
             if len(sales_day_df) > 0:
-                # Calculer par devise
+                # Calculer par devise (utiliser amount original, pas amount_eur)
                 if 'currency' in sales_day_df.columns and 'amount' in sales_day_df.columns:
                     sales_day_eur = sales_day_df[sales_day_df['currency'] == 'EUR']['amount'].sum() if len(sales_day_df[sales_day_df['currency'] == 'EUR']) > 0 else 0
                     sales_day_usd = sales_day_df[sales_day_df['currency'] == 'USD']['amount'].sum() if len(sales_day_df[sales_day_df['currency'] == 'USD']) > 0 else 0
                     sales_day_jpy = sales_day_df[sales_day_df['currency'] == 'JPY']['amount'].sum() if len(sales_day_df[sales_day_df['currency'] == 'JPY']) > 0 else 0
-                # Total en EUR équivalent (pour compatibilité)
-                sales_day = sales_day_df['amount_eur'].sum()
+                # Total en EUR équivalent : calculer depuis les montants par devise pour cohérence
+                # (au lieu d'utiliser amount_eur qui peut avoir des arrondis différents)
+                sales_day = sales_day_eur + (sales_day_usd * usd_rate) + (sales_day_jpy * jpy_rate)
+                
+                # Vérification de cohérence : comparer avec amount_eur.sum() (tolérance 0.01 EUR)
+                sales_day_from_amount_eur = sales_day_df['amount_eur'].sum() if 'amount_eur' in sales_day_df.columns else 0
+                if abs(sales_day - sales_day_from_amount_eur) > 0.01:
+                    # Utiliser amount_eur si disponible et plus précis
+                    sales_day = sales_day_from_amount_eur
+                    # Recalculer les montants par devise depuis amount_eur pour cohérence
+                    if 'amount_eur' in sales_day_df.columns:
+                        sales_day_eur = sales_day_df[sales_day_df['currency'] == 'EUR']['amount_eur'].sum() if len(sales_day_df[sales_day_df['currency'] == 'EUR']) > 0 else 0
+                        sales_day_usd = (sales_day_df[sales_day_df['currency'] == 'USD']['amount_eur'].sum() / usd_rate) if len(sales_day_df[sales_day_df['currency'] == 'USD']) > 0 and usd_rate > 0 else 0
+                        sales_day_jpy = (sales_day_df[sales_day_df['currency'] == 'JPY']['amount_eur'].sum() / jpy_rate) if len(sales_day_df[sales_day_df['currency'] == 'JPY']) > 0 and jpy_rate > 0 else 0
             else:
                 sales_day = 0
         else:
@@ -421,13 +456,24 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
         if len(purchase_open) > 0 and 'payment_date' in purchase_open.columns:
             purchase_day_df = purchase_open[purchase_open['payment_date'] == forecast_date]
             if len(purchase_day_df) > 0:
-                # Calculer par devise
+                # Calculer par devise (utiliser amount original, pas amount_eur)
                 if 'currency' in purchase_day_df.columns and 'amount' in purchase_day_df.columns:
                     purchase_day_eur = purchase_day_df[purchase_day_df['currency'] == 'EUR']['amount'].sum() if len(purchase_day_df[purchase_day_df['currency'] == 'EUR']) > 0 else 0
                     purchase_day_usd = purchase_day_df[purchase_day_df['currency'] == 'USD']['amount'].sum() if len(purchase_day_df[purchase_day_df['currency'] == 'USD']) > 0 else 0
                     purchase_day_jpy = purchase_day_df[purchase_day_df['currency'] == 'JPY']['amount'].sum() if len(purchase_day_df[purchase_day_df['currency'] == 'JPY']) > 0 else 0
-                # Total en EUR équivalent (pour compatibilité)
-                purchase_day = purchase_day_df['amount_eur'].sum()
+                # Total en EUR équivalent : calculer depuis les montants par devise pour cohérence
+                purchase_day = purchase_day_eur + (purchase_day_usd * usd_rate) + (purchase_day_jpy * jpy_rate)
+                
+                # Vérification de cohérence : comparer avec amount_eur.sum() (tolérance 0.01 EUR)
+                purchase_day_from_amount_eur = purchase_day_df['amount_eur'].sum() if 'amount_eur' in purchase_day_df.columns else 0
+                if abs(purchase_day - purchase_day_from_amount_eur) > 0.01:
+                    # Utiliser amount_eur si disponible et plus précis
+                    purchase_day = purchase_day_from_amount_eur
+                    # Recalculer les montants par devise depuis amount_eur pour cohérence
+                    if 'amount_eur' in purchase_day_df.columns:
+                        purchase_day_eur = purchase_day_df[purchase_day_df['currency'] == 'EUR']['amount_eur'].sum() if len(purchase_day_df[purchase_day_df['currency'] == 'EUR']) > 0 else 0
+                        purchase_day_usd = (purchase_day_df[purchase_day_df['currency'] == 'USD']['amount_eur'].sum() / usd_rate) if len(purchase_day_df[purchase_day_df['currency'] == 'USD']) > 0 and usd_rate > 0 else 0
+                        purchase_day_jpy = (purchase_day_df[purchase_day_df['currency'] == 'JPY']['amount_eur'].sum() / jpy_rate) if len(purchase_day_df[purchase_day_df['currency'] == 'JPY']) > 0 and jpy_rate > 0 else 0
             else:
                 purchase_day = 0
         else:
@@ -436,17 +482,51 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
         # Calculer les moyennes historiques par devise pour la base
         # NOTE: Pour simplifier, on applique la même proportion de base_credit/base_debit à chaque devise
         # selon la répartition historique des transactions par devise
+        # IMPORTANT: Utiliser amount_eur pour les totaux (déjà converti en EUR), mais amount original pour les proportions par devise
         if len(bank_until_start) > 0:
-            total_credit_hist = bank_until_start[bank_until_start['type'] == 'credit']['amount'].sum()
-            total_debit_hist = bank_until_start[bank_until_start['type'] == 'debit']['amount'].sum()
+            # Pour les totaux, utiliser amount_eur (déjà converti en EUR)
+            if 'amount_eur' in bank_until_start.columns:
+                total_credit_hist = bank_until_start[bank_until_start['type'] == 'credit']['amount_eur'].sum()
+                total_debit_hist = bank_until_start[bank_until_start['type'] == 'debit']['amount_eur'].sum()
+            else:
+                # Fallback : convertir depuis amount (méthode vectorisée plus efficace)
+                credit_rows = bank_until_start[bank_until_start['type'] == 'credit']
+                debit_rows = bank_until_start[bank_until_start['type'] == 'debit']
+                
+                if len(credit_rows) > 0:
+                    total_credit_hist = credit_rows.apply(
+                        lambda row: convert_to_eur(row.get('amount', 0), row.get('currency', 'EUR'), fx_rates, row.get('date')), 
+                        axis=1
+                    ).sum()
+                else:
+                    total_credit_hist = 0
+                
+                if len(debit_rows) > 0:
+                    total_debit_hist = debit_rows.apply(
+                        lambda row: convert_to_eur(row.get('amount', 0), row.get('currency', 'EUR'), fx_rates, row.get('date')), 
+                        axis=1
+                    ).sum()
+                else:
+                    total_debit_hist = 0
             
-            credit_eur_hist = bank_until_start[(bank_until_start['type'] == 'credit') & (bank_until_start['currency'] == 'EUR')]['amount'].sum()
-            credit_usd_hist = bank_until_start[(bank_until_start['type'] == 'credit') & (bank_until_start['currency'] == 'USD')]['amount'].sum()
-            credit_jpy_hist = bank_until_start[(bank_until_start['type'] == 'credit') & (bank_until_start['currency'] == 'JPY')]['amount'].sum()
-            
-            debit_eur_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'EUR')]['amount'].sum()
-            debit_usd_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'USD')]['amount'].sum()
-            debit_jpy_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'JPY')]['amount'].sum()
+            # Pour les proportions par devise, utiliser amount_eur (déjà converti) pour cohérence
+            if 'amount_eur' in bank_until_start.columns:
+                credit_eur_hist = bank_until_start[(bank_until_start['type'] == 'credit') & (bank_until_start['currency'] == 'EUR')]['amount_eur'].sum()
+                credit_usd_hist = bank_until_start[(bank_until_start['type'] == 'credit') & (bank_until_start['currency'] == 'USD')]['amount_eur'].sum()
+                credit_jpy_hist = bank_until_start[(bank_until_start['type'] == 'credit') & (bank_until_start['currency'] == 'JPY')]['amount_eur'].sum()
+                
+                debit_eur_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'EUR')]['amount_eur'].sum()
+                debit_usd_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'USD')]['amount_eur'].sum()
+                debit_jpy_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'JPY')]['amount_eur'].sum()
+            else:
+                # Fallback : convertir depuis amount
+                credit_eur_hist = bank_until_start[(bank_until_start['type'] == 'credit') & (bank_until_start['currency'] == 'EUR')]['amount'].sum()
+                credit_usd_hist = bank_until_start[(bank_until_start['type'] == 'credit') & (bank_until_start['currency'] == 'USD')]['amount'].sum() * usd_rate
+                credit_jpy_hist = bank_until_start[(bank_until_start['type'] == 'credit') & (bank_until_start['currency'] == 'JPY')]['amount'].sum() * jpy_rate
+                
+                debit_eur_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'EUR')]['amount'].sum()
+                debit_usd_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'USD')]['amount'].sum() * usd_rate
+                debit_jpy_hist = bank_until_start[(bank_until_start['type'] == 'debit') & (bank_until_start['currency'] == 'JPY')]['amount'].sum() * jpy_rate
             
             # Proportions par devise
             prop_credit_eur = credit_eur_hist / total_credit_hist if total_credit_hist > 0 else 0.86  # 86% par défaut (selon spécifications)
@@ -516,7 +596,20 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
         cumul_jpy += net_jpy
         
         # Cash flow net total (EUR équivalent)
+        # IMPORTANT: Vérifier la cohérence entre les deux méthodes de calcul
         net_forecast = credit_forecast - debit_forecast
+        # Calculer aussi depuis les nets par devise pour vérification
+        net_forecast_from_devises = net_eur + (net_usd * usd_rate) + (net_jpy * jpy_rate)
+        
+        # Utiliser la moyenne des deux si différence significative (tolérance 0.01 EUR)
+        if abs(net_forecast - net_forecast_from_devises) > 0.01:
+            # Utiliser la méthode depuis devises qui est plus précise
+            net_forecast = net_forecast_from_devises
+            # Réajuster credit_forecast et debit_forecast pour cohérence
+            credit_forecast = credit_eur + (credit_usd * usd_rate) + (credit_jpy * jpy_rate)
+            debit_forecast = debit_eur + (debit_usd * usd_rate) + (debit_jpy * jpy_rate)
+            net_forecast = credit_forecast - debit_forecast
+        
         cumul_total += net_forecast
         
         # Détection risques (cohérence : chaque jour est classé dans une seule zone)
@@ -596,6 +689,24 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
     # Vérifier que le cumul est cohérent (somme des cash flows nets + solde initial)
     if len(forecast_daily_df) > 0:
         calculated_final = initial_balance_total + forecast_daily_df['Cash_Flow_Net'].sum()
+        
+        # Vérification supplémentaire : cohérence entre cumul_total et somme des cumuls par devise
+        # Récupérer les taux de change utilisés
+        usd_rate = fx_rates.get('USD', 0.92) if fx_rates and 'USD' in fx_rates else 0.92
+        jpy_rate = fx_rates.get('JPY', 0.0065) if fx_rates and 'JPY' in fx_rates else 0.0065
+        
+        # Calculer le cumul total depuis les cumuls par devise (si disponibles)
+        if 'Cumul_EUR' in forecast_daily_df.columns and 'Cumul_USD' in forecast_daily_df.columns and 'Cumul_JPY' in forecast_daily_df.columns:
+            last_row = forecast_daily_df.iloc[-1]
+            cumul_total_from_devises = last_row['Cumul_EUR'] + (last_row['Cumul_USD'] * usd_rate) + (last_row['Cumul_JPY'] * jpy_rate)
+            
+            # Vérifier la cohérence (tolérance pour arrondis)
+            if abs(cumul_total_from_devises - cumul_total) > 1.0:  # Tolérance de 1 EUR pour les arrondis cumulés
+                # Ajuster cumul_total pour qu'il soit cohérent avec les cumuls par devise
+                cumul_total = cumul_total_from_devises
+                if not STREAMLIT_MODE:
+                    print(f"   ⚠️  Ajustement cohérence: cumul_total aligné avec cumuls par devise ({cumul_total:,.2f} EUR)")
+        
         # Tolérance pour les erreurs d'arrondi (0.01 EUR)
         if abs(calculated_final - cumul_total) > 0.01:
             # Réajuster pour garantir la cohérence
@@ -603,6 +714,21 @@ def run_forecast_complete(bank, sales, purchase, start_date, fx_rates, dso_mean,
             # Mettre à jour la dernière ligne
             if len(forecast_daily_df) > 0:
                 forecast_daily_df.iloc[-1, forecast_daily_df.columns.get_loc('Cumul_Total_EUR')] = round(cumul_total, 2)
+                # Mettre aussi à jour les cumuls par devise pour cohérence
+                if 'Cumul_EUR' in forecast_daily_df.columns:
+                    # Ajuster proportionnellement pour maintenir la cohérence
+                    last_row_idx = forecast_daily_df.index[-1]
+                    current_cumul_eur = forecast_daily_df.loc[last_row_idx, 'Cumul_EUR']
+                    current_cumul_usd = forecast_daily_df.loc[last_row_idx, 'Cumul_USD']
+                    current_cumul_jpy = forecast_daily_df.loc[last_row_idx, 'Cumul_JPY']
+                    current_total_from_devises = current_cumul_eur + (current_cumul_usd * usd_rate) + (current_cumul_jpy * jpy_rate)
+                    
+                    if abs(current_total_from_devises) > 0.01:
+                        # Ajuster proportionnellement
+                        ratio = cumul_total / current_total_from_devises
+                        forecast_daily_df.loc[last_row_idx, 'Cumul_EUR'] = round(current_cumul_eur * ratio, 2)
+                        forecast_daily_df.loc[last_row_idx, 'Cumul_USD'] = round(current_cumul_usd * ratio, 2)
+                        forecast_daily_df.loc[last_row_idx, 'Cumul_JPY'] = round(current_cumul_jpy * ratio, 2)
     
     # Trouver le jour le plus bas (basé sur le SOLDE NET pour refléter la vraie situation)
     if len(forecast_daily_df) > 0 and 'Cumul_Net_EUR' in forecast_daily_df.columns:
@@ -834,6 +960,154 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
             st.metric("📋 Factures Fournisseurs", f"{len(purchase):,}")
         with col4:
             st.metric("📅 Période", f"{bank['date'].min().strftime('%Y-%m-%d')} à {bank['date'].max().strftime('%Y-%m-%d')}")
+        
+        st.markdown("---")
+        
+        # ========================================================================
+        # SOLDES DES COMPTES EN FIN D'ANNÉE 2024
+        # ========================================================================
+        st.markdown("### 💰 Soldes des Comptes en Fin d'Année 2024")
+        
+        # Filtrer les transactions jusqu'au 31 décembre 2024
+        end_2024 = datetime(2024, 12, 31).date()
+        bank_2024 = bank[bank['date'].dt.date <= end_2024].copy()
+        
+        if 'account' in bank_2024.columns:
+            # Calculer les soldes par compte et devise
+            account_balances = {}
+            for account in bank_2024['account'].unique():
+                account_data = bank_2024[bank_2024['account'] == account]
+                for currency in account_data['currency'].unique():
+                    currency_data = account_data[account_data['currency'] == currency]
+                    
+                    # Calculer le solde net (credits - debits)
+                    credits = currency_data[currency_data['type'] == 'credit']['amount'].sum()
+                    debits = currency_data[currency_data['type'] == 'debit']['amount'].sum()
+                    net_balance = credits - debits
+                    
+                    # Conversion en EUR pour le total
+                    if 'amount_eur' in currency_data.columns:
+                        credits_eur = currency_data[currency_data['type'] == 'credit']['amount_eur'].sum()
+                        debits_eur = currency_data[currency_data['type'] == 'debit']['amount_eur'].sum()
+                        net_balance_eur = credits_eur - debits_eur
+                    else:
+                        # Fallback si amount_eur n'existe pas
+                        rate = fx_rates_dashboard.get(currency, 1.0)
+                        net_balance_eur = net_balance * rate
+                    
+                    key = f"{account}_{currency}"
+                    account_balances[key] = {
+                        'account': account,
+                        'currency': currency,
+                        'balance': net_balance,
+                        'balance_eur': net_balance_eur,
+                        'credits': credits,
+                        'debits': debits
+                    }
+            
+            # Afficher les soldes par compte
+            if account_balances:
+                col1, col2, col3, col4 = st.columns(4)
+                accounts_displayed = 0
+                for key, balance_info in account_balances.items():
+                    if accounts_displayed % 4 == 0:
+                        col = col1
+                    elif accounts_displayed % 4 == 1:
+                        col = col2
+                    elif accounts_displayed % 4 == 2:
+                        col = col3
+                    else:
+                        col = col4
+                    
+                    with col:
+                        currency_symbol = balance_info['currency']
+                        balance_value = balance_info['balance']
+                        balance_eur_value = balance_info['balance_eur']
+                        account_name = balance_info['account'].replace('_', ' ')
+                        
+                        st.metric(
+                            f"{account_name} ({currency_symbol})",
+                            f"{balance_value:,.2f} {currency_symbol}",
+                            delta=f"{balance_eur_value:,.2f} EUR"
+                        )
+                    accounts_displayed += 1
+                
+                # Tableau détaillé
+                st.markdown("#### 📊 Détail des Soldes par Compte")
+                balance_df = pd.DataFrame([
+                    {
+                        'Compte': info['account'].replace('_', ' '),
+                        'Devise': info['currency'],
+                        'Solde': f"{info['balance']:,.2f} {info['currency']}",
+                        'Solde (EUR)': f"{info['balance_eur']:,.2f} EUR",
+                        'Encaissements': f"{info['credits']:,.2f} {info['currency']}",
+                        'Décaissements': f"{info['debits']:,.2f} {info['currency']}"
+                    }
+                    for info in account_balances.values()
+                ])
+                st.dataframe(balance_df, use_container_width=True, hide_index=True)
+        else:
+            # Si pas de colonne account, calculer par devise uniquement
+            st.warning("⚠️ Colonne 'account' non trouvée. Affichage par devise uniquement.")
+            for currency in bank_2024['currency'].unique():
+                currency_data = bank_2024[bank_2024['currency'] == currency]
+                credits = currency_data[currency_data['type'] == 'credit']['amount'].sum()
+                debits = currency_data[currency_data['type'] == 'debit']['amount'].sum()
+                net_balance = credits - debits
+                st.metric(f"Solde {currency}", f"{net_balance:,.2f} {currency}")
+        
+        st.markdown("---")
+        
+        # ========================================================================
+        # PAIEMENTS RÉCURRENTS
+        # ========================================================================
+        st.markdown("### 🔄 Paiements Récurrents (2024)")
+        
+        # Identifier les paiements récurrents
+        recurring_categories = ['Loan Interest', 'Payroll', 'Bank Fee', 'Supplier Payment']
+        bank_recurring_2024 = bank_2024[bank_2024['category'].isin(recurring_categories)].copy()
+        
+        if len(bank_recurring_2024) > 0:
+            # Par catégorie
+            st.markdown("#### 📋 Par Catégorie")
+            recurring_by_category = bank_recurring_2024.groupby('category').agg({
+                'amount_eur': ['sum', 'count', 'mean']
+            }).round(2)
+            recurring_by_category.columns = ['Total (EUR)', 'Nombre', 'Moyenne (EUR)']
+            st.dataframe(recurring_by_category, use_container_width=True)
+            
+            # Par compte
+            if 'account' in bank_recurring_2024.columns:
+                st.markdown("#### 💳 Par Compte")
+                recurring_by_account = bank_recurring_2024.groupby(['account', 'currency']).agg({
+                    'amount_eur': ['sum', 'count']
+                }).round(2)
+                recurring_by_account.columns = ['Total (EUR)', 'Nombre']
+                st.dataframe(recurring_by_account, use_container_width=True)
+            
+            # Par mois
+            st.markdown("#### 📅 Évolution Mensuelle")
+            bank_recurring_2024['month'] = bank_recurring_2024['date'].dt.to_period('M')
+            recurring_monthly = bank_recurring_2024.groupby('month')['amount_eur'].sum().sort_index()
+            
+            fig = px.bar(
+                x=[str(m) for m in recurring_monthly.index],
+                y=recurring_monthly.values,
+                title="Paiements Récurrents Mensuels (2024)",
+                labels={'x': 'Mois', 'y': 'Montant (EUR)'}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Statistiques
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Récurrents 2024", f"{bank_recurring_2024['amount_eur'].sum():,.2f} EUR")
+            with col2:
+                st.metric("Moyenne Mensuelle", f"{recurring_monthly.mean():,.2f} EUR")
+            with col3:
+                st.metric("Nombre de Transactions", f"{len(bank_recurring_2024):,}")
+        else:
+            st.info("ℹ️ Aucun paiement récurrent identifié dans les données 2024.")
         
         st.markdown("---")
         st.markdown("### 📐 Méthode de Forecast: Direct Method")
@@ -3473,19 +3747,56 @@ for day in range(forecast_days_count):
         if 'forecast_results' in st.session_state and st.session_state.forecast_results is not None and section == "📊 Scénarios & Risques":
             forecast_results = st.session_state.forecast_results
             final_balance = forecast_results.get('final_balance', 0)
-            worst_day_balance = forecast_results.get('worst_day', {}).get('Cumul_Total_EUR', 0)
+            
+            # Récupérer correctement le worst_day avec sa date et son solde
+            worst_day = forecast_results.get('worst_day', {})
+            if isinstance(worst_day, pd.Series):
+                worst_day_date = worst_day.get('Date', 'N/A')
+                worst_day_balance = worst_day.get('Cumul_Total_EUR', 0)
+                # Si Cumul_Total_EUR n'existe pas, utiliser Cumul_Net_EUR + dette
+                if pd.isna(worst_day_balance) or worst_day_balance == 0:
+                    worst_day_balance_net = worst_day.get('Cumul_Net_EUR', 0)
+                    if not pd.isna(worst_day_balance_net):
+                        worst_day_balance = worst_day_balance_net + DEBT_PRINCIPAL
+            elif isinstance(worst_day, dict):
+                worst_day_date = worst_day.get('Date', 'N/A')
+                worst_day_balance = worst_day.get('Cumul_Total_EUR', 0)
+                if worst_day_balance == 0:
+                    worst_day_balance_net = worst_day.get('Cumul_Net_EUR', 0)
+                    if worst_day_balance_net != 0:
+                        worst_day_balance = worst_day_balance_net + DEBT_PRINCIPAL
+            else:
+                worst_day_date = 'N/A'
+                worst_day_balance = 0
+            
+            # Convertir en float si nécessaire
             if isinstance(worst_day_balance, str):
                 try:
                     worst_day_balance = float(str(worst_day_balance).replace(',', ''))
                 except:
                     worst_day_balance = 0
+            worst_day_balance = float(worst_day_balance) if not pd.isna(worst_day_balance) else 0
+            
+            # Vérifier aussi dans le DataFrame pour trouver le vrai minimum
+            if len(forecast_results.get('forecast_df', pd.DataFrame())) > 0:
+                forecast_df = forecast_results['forecast_df']
+                if 'Cumul_Total_EUR' in forecast_df.columns:
+                    actual_min_idx = forecast_df['Cumul_Total_EUR'].idxmin()
+                    actual_min_row = forecast_df.loc[actual_min_idx]
+                    actual_min_balance = actual_min_row['Cumul_Total_EUR']
+                    actual_min_date = actual_min_row['Date']
+                    
+                    # Utiliser les valeurs réelles du DataFrame si elles sont différentes
+                    if abs(actual_min_balance - worst_day_balance) > 0.01:
+                        worst_day_balance = actual_min_balance
+                        worst_day_date = actual_min_date
             
             st.markdown("#### 📊 Situation Actuelle (Basée sur Forecast)")
             col1, col2 = st.columns(2)
             with col1:
                 st.metric("Solde Final Forecast", f"{final_balance:,.2f} EUR")
             with col2:
-                st.metric("Jour le Plus Bas", f"{worst_day_balance:,.2f} EUR")
+                st.metric("Jour le Plus Bas", f"{worst_day_balance:,.2f} EUR", help=f"Date: {worst_day_date}")
             
             if final_balance > 1_000_000:
                 st.success("""
@@ -3500,6 +3811,7 @@ for day in range(forecast_days_count):
                 **💡 Calcul:** Rembourser €1M de dette = économie de **€47,000/an** en intérêts
                 """)
             elif final_balance < 0 or worst_day_balance < -100_000:
+                worst_day_display = f"{worst_day_date} ({worst_day_balance:,.0f} EUR)" if worst_day_date != 'N/A' else f"{worst_day_balance:,.0f} EUR"
                 st.error(f"""
                 **🚨 DÉFICIT DE TRÉSORERIE DÉTECTÉ**
                 
@@ -3510,7 +3822,7 @@ for day in range(forecast_days_count):
                 4. **Négociation fournisseurs** : Étendre les délais de paiement (DPO)
                 5. **Accélération recouvrement** : Relances clients pour réduire DSO
                 
-                **⚠️ Priorité:** Agir AVANT le jour le plus bas ({worst_day_balance:,.0f} EUR)
+                **⚠️ Priorité:** Agir AVANT le jour le plus bas: {worst_day_display}
                 """)
             else:
                 st.info("""
