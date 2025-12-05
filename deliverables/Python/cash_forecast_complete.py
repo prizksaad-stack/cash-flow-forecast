@@ -13,6 +13,7 @@ import os
 import subprocess
 import webbrowser
 from pathlib import Path
+import contextlib
 
 # Imports communs
 import pandas as pd
@@ -2943,7 +2944,13 @@ for day in range(forecast_days_count):
             st.session_state.forecast_results = None
         
         if st.button("🚀 Lancer le Forecast", type="primary", width='stretch'):
-            with st.spinner("⏳ Calcul du forecast en cours..."):
+            # Afficher le spinner seulement si show_dev_indicators est activé
+            if show_dev_indicators:
+                spinner_context = st.spinner("⏳ Calcul du forecast en cours...")
+            else:
+                spinner_context = contextlib.nullcontext()
+            
+            with spinner_context:
                 # Calculer tous les paramètres nécessaires
                 fx_rates = get_real_exchange_rates()
                 
@@ -3013,8 +3020,9 @@ for day in range(forecast_days_count):
                 # Stocker dans session_state
                 st.session_state.forecast_results = forecast_results
                 
-                # Afficher les résultats
-                st.success(f"✅ Forecast calculé pour {st.session_state.forecast_results['forecast_days_count']} jours (du {st.session_state.forecast_results['start_date'].strftime('%Y-%m-%d')} au {st.session_state.forecast_results['end_date'].strftime('%Y-%m-%d')})")
+                # Afficher les résultats seulement si show_dev_indicators est activé
+                if show_dev_indicators:
+                    st.success(f"✅ Forecast calculé pour {st.session_state.forecast_results['forecast_days_count']} jours (du {st.session_state.forecast_results['start_date'].strftime('%Y-%m-%d')} au {st.session_state.forecast_results['end_date'].strftime('%Y-%m-%d')})")
         
         # Afficher les résultats seulement si le forecast a été lancé ET qu'on est dans la section "Lancer Forecast"
         # IMPORTANT: Cette condition garantit que les résultats ne s'affichent QUE dans cette section
