@@ -1,0 +1,55 @@
+======================================================================
+RAPPORT COMPLET CASH FORECASTING
+======================================================================
+
+Date de départ forecast: 2025-02-15
+
+1. MÉTRIQUES CLÉS
+   DSO moyen: 55.5 jours
+   DPO moyen: 56.8 jours
+
+1.1. SOLDES PAR DEVISE
+   💶 EUR:
+      Solde initial: -2,939,412.09 EUR
+      Solde final: -3,282,995.92 EUR
+      Variation: -343,583.83 EUR (+11.69%)
+      Total encaissements: 511,495.77 EUR
+      Total décaissements: 855,079.60 EUR
+
+   💵 USD:
+      Solde initial: 73,414.04 USD
+      Solde final: 82,018.40 USD
+      Variation: +8,604.36 USD (+11.72%)
+      Total encaissements: 17,942.17 USD
+      Total décaissements: 9,337.79 USD
+
+   💴 JPY:
+      Solde initial: 28,389,088.51 JPY
+      Solde final: 31,715,786.09 JPY
+      Variation: +3,326,697.58 JPY (+11.72%)
+      Total encaissements: 3,345,962.68 JPY
+      Total décaissements: 19,265.18 JPY
+
+   🌍 TOTAL (en EUR après conversion):
+      Solde initial: 25,523,090.46 EUR
+      Solde final: -3,037,277.79 EUR
+      Variation: -28,560,368.25 EUR (-111.90%)
+      Total encaissements: 545,426.69 EUR
+      Total décaissements: 863,235.77 EUR
+
+2. CLASSIFICATION RÉCURRENT vs NON-RÉCURRENT
+   Récurrent: 408 transactions
+   Non-récurrent: 299 transactions
+
+3. FORECAST QUOTIDIEN (45 jours)
+   Jours avec cash flow négatif: 28
+   Jours avec cumul négatif: 45
+
+4. FORECAST MENSUEL (2 mois)
+   Mois  Encaissements  Décaissements  Cash_Flow_Net       Cumul
+2025-02      130481.00      287274.90     -156793.88 25366296.58
+2025-03      414945.69      575960.87     -161015.19 25205281.39
+
+5. ZONES DE RISQUE
+Risk_Zone
+Critical    45

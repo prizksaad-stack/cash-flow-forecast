@@ -15,9 +15,8 @@ ENV/
 # Streamlit
 .streamlit/secrets.toml
 
-# Données sensibles (optionnel - à adapter selon vos besoins)
-# *.csv
-# bdd/
+# Données générées (forecasts)
+deliverables/bdd/
 
 # IDE
 .vscode/
@@ -33,3 +32,6 @@ Thumbs.db
 # Logs
 *.log
 
+# Fichiers temporaires
+*.tmp
+*.bak

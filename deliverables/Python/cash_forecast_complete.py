@@ -1053,7 +1053,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
                     }
                     for info in account_balances.values()
                 ])
-                st.dataframe(balance_df, use_container_width=True, hide_index=True)
+                st.dataframe(balance_df, width='stretch', hide_index=True)
         else:
             # Si pas de colonne account, calculer par devise uniquement
             st.warning("⚠️ Colonne 'account' non trouvée. Affichage par devise uniquement.")
@@ -1082,7 +1082,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
                 'amount_eur': ['sum', 'count', 'mean']
             }).round(2)
             recurring_by_category.columns = ['Total (EUR)', 'Nombre', 'Moyenne (EUR)']
-            st.dataframe(recurring_by_category, use_container_width=True)
+            st.dataframe(recurring_by_category, width='stretch')
             
             # Par compte
             if 'account' in bank_recurring_2024.columns:
@@ -1091,7 +1091,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
                     'amount_eur': ['sum', 'count']
                 }).round(2)
                 recurring_by_account.columns = ['Total (EUR)', 'Nombre']
-                st.dataframe(recurring_by_account, use_container_width=True)
+                st.dataframe(recurring_by_account, width='stretch')
             
             # Par mois
             st.markdown("#### 📅 Évolution Mensuelle")
@@ -1104,7 +1104,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
                 title="Paiements Récurrents Mensuels (2024)",
                 labels={'x': 'Mois', 'y': 'Montant (EUR)'}
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
             
             # Statistiques
             col1, col2, col3 = st.columns(3)
@@ -1664,17 +1664,17 @@ dso_mean = sales_paid['days_to_pay'].mean()
                 
                 st.markdown("#### 📊 Top clients (montant ouvert)")
                 cols_display = [client_col, 'montant_total', 'montant_ouvert', 'montant_overdue', 'DSO_moyen']
-                st.dataframe(synth[cols_display].head(10), use_container_width=True)
+                st.dataframe(synth[cols_display].head(10), width='stretch')
                 
                 st.markdown("#### 🧮 DSO moyen par client (factures payées)")
                 if len(dso_client) > 0:
-                    st.dataframe(dso_client.sort_values('DSO_moyen', ascending=False), use_container_width=True)
+                    st.dataframe(dso_client.sort_values('DSO_moyen', ascending=False), width='stretch')
                 else:
                     st.info("Pas de factures payées disponibles pour calculer le DSO par client.")
                 
                 st.markdown("#### ⏳ Ageing des factures ouvertes (par client)")
                 if len(ageing_pivot) > 0:
-                    st.dataframe(ageing_pivot, use_container_width=True)
+                    st.dataframe(ageing_pivot, width='stretch')
                 else:
                     st.info("Pas de factures ouvertes/échues pour l'ageing.")
         
