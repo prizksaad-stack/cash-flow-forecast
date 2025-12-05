@@ -907,6 +907,10 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         axis=1
     )
     
+    # Supprimer le compte EUR_Payroll (miroir du compte EUR_Operating)
+    if 'account' in bank.columns:
+        bank = bank[bank['account'] != 'EUR_Payroll'].copy()
+    
     # DSO - Vérifier les dates invalides correctement
     sales_paid = sales[sales['status'] == 'Paid'].copy()
     if len(sales_paid) > 0:
@@ -2282,12 +2286,14 @@ fx_volatility_jpy = 0.12  # ~12% volatilité annuelle JPY/EUR
                 st.metric("Équivalent EUR", f"{exposure_jpy * fx_rates.get('JPY', 0.0065):,.2f} EUR")
                 st.metric("Volatilité estimée", f"{fx_volatility_jpy*100:.1f}%")
             
-            st.markdown("**Taux de change actuels:**")
+            st.markdown("**Taux de change actuels (convention marché):**")
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("USD/EUR", f"{fx_rates.get('USD', 0.92):.4f}")
+                eur_usd = 1 / fx_rates.get('USD', 0.92) if fx_rates.get('USD', 0.92) else 0
+                st.metric("EUR/USD", f"{eur_usd:.4f}")
             with col2:
-                st.metric("JPY/EUR", f"{fx_rates.get('JPY', 0.0065):.6f}")
+                eur_jpy = 1 / fx_rates.get('JPY', 0.0065) if fx_rates.get('JPY', 0.0065) else 0
+                st.metric("EUR/JPY", f"{eur_jpy:.2f}")
             
             st.markdown("**Justification méthodologique:**")
             st.info("""
@@ -2299,8 +2305,8 @@ fx_volatility_jpy = 0.12  # ~12% volatilité annuelle JPY/EUR
             **Méthode d'estimation :**
             - ⚠️ **Limitation :** Pas de données historiques de taux de change dans les fichiers fournis
             - ✅ **Solution :** Utilise des volatilités standard marché (estimations conservatrices)
-            - 📊 **USD/EUR :** ~10% volatilité annuelle (standard marché 2024)
-            - 📊 **JPY/EUR :** ~12% volatilité annuelle (standard marché 2024)
+            - 📊 **EUR/USD :** ~10% volatilité annuelle (standard marché 2024)
+            - 📊 **EUR/JPY :** ~12% volatilité annuelle (standard marché 2024)
             
             **Application au forecast :**
             - La volatilité est utilisée pour simuler des variations de taux de change
@@ -3792,7 +3798,7 @@ for day in range(forecast_days_count):
             st.info("""
             **Hypothèses:**
             - Taux d'intérêt : Euribor 3M + 1.2% (4.7%)
-            - Taux de change : Taux actuels (USD/EUR, JPY/EUR)
+            - Taux de change : Taux actuels (EUR/USD, EUR/JPY)
             - Volumes : Moyennes historiques
             - Inflation : Taux calculé depuis données historiques
             - DSO/DPO : Moyennes historiques
@@ -3903,6 +3909,52 @@ for day in range(forecast_days_count):
                      help="Montant total en JPY dans les transactions")
             st.metric("Valeur EUR Actuelle", f"{exposure_jpy_amount * jpy_rate_current:,.2f} EUR")
         
+        # --------------------------------------------------------------------
+        # Sensibilités interactives (sliders)
+        # --------------------------------------------------------------------
+        st.markdown("### 🎚️ Sensibilités FX & Taux (sliders)")
+        col_fx1, col_fx2, col_rate = st.columns(3)
+        with col_fx1:
+            eurusd_move = st.slider("EUR/USD (variation %)", -5.0, 5.0, 0.0, step=0.5,
+                                    help="Variation relative du taux EUR/USD (convention marché)")
+        with col_fx2:
+            eurjpy_move = st.slider("EUR/JPY (variation %)", -5.0, 5.0, 0.0, step=0.5,
+                                    help="Variation relative du taux EUR/JPY (convention marché)")
+        with col_rate:
+            e3m_move_bp = st.slider("Euribor 3M (bp)", -200, 200, 0, step=10,
+                                    help="Choc de taux en points de base (1 bp = 0.01%)")
+        
+        # Calcul des impacts
+        eurusd_current = 1 / usd_rate_current if usd_rate_current else 0
+        eurusd_new = eurusd_current * (1 + eurusd_move/100)
+        usd_rate_new = 1 / eurusd_new if eurusd_new else usd_rate_current
+        impact_usd_sens = exposure_usd_amount * (usd_rate_new - usd_rate_current)
+        
+        eurjpy_current = 1 / jpy_rate_current if jpy_rate_current else 0
+        eurjpy_new = eurjpy_current * (1 + eurjpy_move/100)
+        jpy_rate_new = 1 / eurjpy_new if eurjpy_new else jpy_rate_current
+        impact_jpy_sens = exposure_jpy_amount * (jpy_rate_new - jpy_rate_current)
+        
+        new_euribor = EURIBOR_3M_BASE + (e3m_move_bp / 10000)
+        new_rate_all_in = new_euribor + DEBT_SPREAD
+        new_interest_monthly = DEBT_PRINCIPAL * (new_rate_all_in / 12)
+        impact_interest = new_interest_monthly - DEBT_MONTHLY_INTEREST
+        
+        st.markdown("#### 📊 Résultat des sensibilités")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("EUR/USD simulé", f"{eurusd_new:.4f}", delta=f"{eurusd_move:+.1f}%")
+            st.metric("Impact USD (EUR)", f"{impact_usd_sens:+,.2f} EUR",
+                     help="Variation de valeur EUR de l'exposition USD")
+        with c2:
+            st.metric("EUR/JPY simulé", f"{eurjpy_new:.2f}", delta=f"{eurjpy_move:+.1f}%")
+            st.metric("Impact JPY (EUR)", f"{impact_jpy_sens:+,.2f} EUR",
+                     help="Variation de valeur EUR de l'exposition JPY")
+        with c3:
+            st.metric("Euribor 3M simulé", f"{new_euribor*100:.2f}%", delta=f"{e3m_move_bp:+} bp")
+            st.metric("Impact intérêts dette", f"{impact_interest:+,.2f} EUR/mois",
+                     help="Variation des intérêts mensuels sur la dette €20M")
+        
         st.markdown("#### 📈 Impact des Variations ±5%")
         
         col1, col2 = st.columns(2)
@@ -3913,11 +3965,15 @@ for day in range(forecast_days_count):
             jpy_rate_up = jpy_rate_current * 1.05
             impact_usd_up = exposure_usd_amount * (usd_rate_up - usd_rate_current)
             impact_jpy_up = exposure_jpy_amount * (jpy_rate_up - jpy_rate_current)
+            eurusd_current = 1 / usd_rate_current if usd_rate_current else 0
+            eurusd_up = 1 / usd_rate_up if usd_rate_up else 0
+            eurjpy_current = 1 / jpy_rate_current if jpy_rate_current else 0
+            eurjpy_up = 1 / jpy_rate_up if jpy_rate_up else 0
             
-            st.metric("USD/EUR", f"{usd_rate_up:.4f}", delta="+5%", delta_color="normal")
+            st.metric("EUR/USD", f"{eurusd_up:.4f}", delta="+5%", delta_color="normal")
             st.metric("Impact USD", f"+{impact_usd_up:,.2f} EUR",
                      help="Gain sur encaissements USD")
-            st.metric("JPY/EUR", f"{jpy_rate_up:.6f}", delta="+5%", delta_color="normal")
+            st.metric("EUR/JPY", f"{eurjpy_up:.2f}", delta="+5%", delta_color="normal")
             st.metric("Impact JPY", f"+{impact_jpy_up:,.2f} EUR",
                      help="Gain sur encaissements JPY")
             st.success(f"✅ **Gain Total:** +{impact_usd_up + impact_jpy_up:,.2f} EUR")
@@ -3928,11 +3984,13 @@ for day in range(forecast_days_count):
             jpy_rate_down = jpy_rate_current * 0.95
             impact_usd_down = exposure_usd_amount * (usd_rate_down - usd_rate_current)
             impact_jpy_down = exposure_jpy_amount * (jpy_rate_down - jpy_rate_current)
+            eurusd_down = 1 / usd_rate_down if usd_rate_down else 0
+            eurjpy_down = 1 / jpy_rate_down if jpy_rate_down else 0
             
-            st.metric("USD/EUR", f"{usd_rate_down:.4f}", delta="-5%", delta_color="inverse")
+            st.metric("EUR/USD", f"{eurusd_down:.4f}", delta="-5%", delta_color="inverse")
             st.metric("Impact USD", f"{impact_usd_down:,.2f} EUR",
                      help="Perte sur encaissements USD")
-            st.metric("JPY/EUR", f"{jpy_rate_down:.6f}", delta="-5%", delta_color="inverse")
+            st.metric("EUR/JPY", f"{eurjpy_down:.2f}", delta="-5%", delta_color="inverse")
             st.metric("Impact JPY", f"{impact_jpy_down:,.2f} EUR",
                      help="Perte sur encaissements JPY")
             st.error(f"🚨 **Perte Total:** {impact_usd_down + impact_jpy_down:,.2f} EUR")
