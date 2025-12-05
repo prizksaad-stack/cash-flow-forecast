@@ -961,7 +961,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         return bank_clean, dso_mean, dpo_mean, sales_paid, sales_paid_valid, purchase_paid, purchase_paid_valid
     
     # Calculer seulement si pas déjà fait
-    if 'metrics_calculated' not in st.session_state:
+    if 'metrics_calculated' not in st.session_state or 'sales_paid' not in st.session_state:
         bank, dso_mean, dpo_mean, sales_paid, sales_paid_valid, purchase_paid, purchase_paid_valid = calculate_base_metrics(bank, sales, purchase)
         st.session_state.bank = bank
         st.session_state.dso_mean = dso_mean
@@ -972,13 +972,13 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         st.session_state.purchase_paid_valid = purchase_paid_valid
         st.session_state.metrics_calculated = True
     else:
-        bank = st.session_state.bank
-        dso_mean = st.session_state.dso_mean
-        dpo_mean = st.session_state.dpo_mean
-        sales_paid = st.session_state.sales_paid
-        sales_paid_valid = st.session_state.sales_paid_valid
-        purchase_paid = st.session_state.purchase_paid
-        purchase_paid_valid = st.session_state.purchase_paid_valid
+        bank = st.session_state.get('bank', bank)
+        dso_mean = st.session_state.get('dso_mean', 0)
+        dpo_mean = st.session_state.get('dpo_mean', 0)
+        sales_paid = st.session_state.get('sales_paid', pd.DataFrame())
+        sales_paid_valid = st.session_state.get('sales_paid_valid', pd.DataFrame())
+        purchase_paid = st.session_state.get('purchase_paid', pd.DataFrame())
+        purchase_paid_valid = st.session_state.get('purchase_paid_valid', pd.DataFrame())
     
     # Sections du dashboard
     if section == "🏠 Vue d'ensemble":
