@@ -853,7 +853,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
     # Mode UI léger : désactiver les indicateurs de progression trop visibles
     show_dev_indicators = st.sidebar.checkbox("Afficher indicateurs de progression (dev)", False)
     
-    @st.cache_data
+    @st.cache_data(ttl=3600)  # Cache pour 1 heure
     def load_data():
         """Charge les données depuis les CSV"""
         try:
@@ -867,93 +867,108 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
             
             # Vérifier que les fichiers existent
             if not bank_path.exists():
-                st.error(f"❌ Fichier non trouvé: {bank_path}")
-                st.info(f"📁 Répertoire de données: {root_dir}")
-                st.info(f"📁 Fichiers dans ce répertoire:")
-                try:
-                    csv_files = list(root_dir.glob('*.csv'))
-                    for f in csv_files:
-                        st.info(f"   - {f.name}")
-                except:
-                    pass
                 return None, None, None
             
-            # Charger les données
+            # Charger les données (sans affichage pour accélérer)
             bank = pd.read_csv(bank_path, parse_dates=['date'])
             sales = pd.read_csv(sales_path, parse_dates=['issue_date', 'due_date', 'payment_date'])
             purchase = pd.read_csv(purchase_path, parse_dates=['issue_date', 'due_date', 'payment_date'])
             
-            if show_dev_indicators:
-                st.success(f"✅ Données chargées avec succès!")
-                st.info(f"📊 {len(bank)} transactions bancaires, {len(sales)} factures clients, {len(purchase)} factures fournisseurs")
-            
             return bank, sales, purchase
         except Exception as e:
-            st.error(f"❌ Erreur lors du chargement des données: {e}")
-            import traceback
-            st.code(traceback.format_exc())
-            st.info(f"📁 Répertoire de travail actuel: {Path.cwd()}")
             return None, None, None
     
-    bank, sales, purchase = load_data()
+    # Charger les données de manière lazy (seulement quand nécessaire)
+    if 'data_loaded' not in st.session_state:
+        with st.spinner("⏳ Chargement des données..."):
+            bank, sales, purchase = load_data()
+            st.session_state.data_loaded = True
+            st.session_state.bank = bank
+            st.session_state.sales = sales
+            st.session_state.purchase = purchase
+            if show_dev_indicators and bank is not None:
+                st.success(f"✅ Données chargées avec succès!")
+                st.info(f"📊 {len(bank)} transactions bancaires, {len(sales)} factures clients, {len(purchase)} factures fournisseurs")
+    else:
+        bank = st.session_state.bank
+        sales = st.session_state.sales
+        purchase = st.session_state.purchase
     
     if bank is None:
         st.error("❌ Impossible de charger les données. Vérifiez que les fichiers CSV sont présents.")
         st.stop()
     
-    # Calculer les métriques de base
-    # IMPORTANT: Convertir toutes les transactions en EUR pour les calculs
-    # Récupérer les taux de change une seule fois
-    fx_rates_dashboard = get_real_exchange_rates()
-    # Convertir amount en EUR selon la devise
-    bank['amount_eur'] = bank.apply(
-        lambda x: convert_to_eur(x['amount'], x.get('currency', 'EUR'), fx_rates_dashboard, x['date']), 
-        axis=1
-    )
+    # Calculer les métriques de base (avec cache pour éviter de recalculer)
+    @st.cache_data(ttl=3600)
+    def prepare_data(bank, sales, purchase):
+        """Prépare les données avec conversion en EUR"""
+        bank_copy = bank.copy()
+        # Récupérer les taux de change une seule fois
+        fx_rates_dashboard = get_real_exchange_rates(verbose=False)
+        # Convertir amount en EUR selon la devise
+        bank_copy['amount_eur'] = bank_copy.apply(
+            lambda x: convert_to_eur(x['amount'], x.get('currency', 'EUR'), fx_rates_dashboard, x['date']), 
+            axis=1
+        )
+        return bank_copy, fx_rates_dashboard
     
-    # Supprimer le compte EUR_Payroll (miroir du compte EUR_Operating)
-    if 'account' in bank.columns:
-        bank = bank[bank['account'] != 'EUR_Payroll'].copy()
+    # Préparer les données seulement si pas déjà fait
+    if 'bank_prepared' not in st.session_state:
+        bank, fx_rates_dashboard = prepare_data(bank, sales, purchase)
+        st.session_state.bank_prepared = bank
+        st.session_state.fx_rates_dashboard = fx_rates_dashboard
+    else:
+        bank = st.session_state.bank_prepared
+        fx_rates_dashboard = st.session_state.fx_rates_dashboard
     
-    # DSO - Vérifier les dates invalides correctement
-    sales_paid = sales[sales['status'] == 'Paid'].copy()
-    if len(sales_paid) > 0:
-        # Calculer days_to_pay pour toutes les factures (même si certaines dates sont manquantes)
-        sales_paid['has_valid_dates'] = sales_paid['payment_date'].notna() & sales_paid['issue_date'].notna()
-        # Calculer days_to_pay seulement pour les factures avec dates valides
-        sales_paid.loc[sales_paid['has_valid_dates'], 'days_to_pay'] = (
-            sales_paid.loc[sales_paid['has_valid_dates'], 'payment_date'] - 
-            sales_paid.loc[sales_paid['has_valid_dates'], 'issue_date']
-        ).dt.days
+    # Calculer les métriques de base (avec cache)
+    @st.cache_data(ttl=3600)
+    def calculate_base_metrics(bank, sales, purchase):
+        """Calcule les métriques de base (DSO, DPO) avec cache"""
+        # Supprimer le compte EUR_Payroll
+        bank_clean = bank.copy()
+        if 'account' in bank_clean.columns:
+            bank_clean = bank_clean[bank_clean['account'] != 'EUR_Payroll'].copy()
         
-        sales_paid_valid = sales_paid[sales_paid['has_valid_dates']].copy()
-        if len(sales_paid_valid) > 0:
-            dso_mean = sales_paid_valid['days_to_pay'].mean()
+        # DSO
+        sales_paid = sales[sales['status'] == 'Paid'].copy()
+        if len(sales_paid) > 0:
+            sales_paid['has_valid_dates'] = sales_paid['payment_date'].notna() & sales_paid['issue_date'].notna()
+            sales_paid.loc[sales_paid['has_valid_dates'], 'days_to_pay'] = (
+                sales_paid.loc[sales_paid['has_valid_dates'], 'payment_date'] - 
+                sales_paid.loc[sales_paid['has_valid_dates'], 'issue_date']
+            ).dt.days
+            sales_paid_valid = sales_paid[sales_paid['has_valid_dates']].copy()
+            dso_mean = sales_paid_valid['days_to_pay'].mean() if len(sales_paid_valid) > 0 else 0
         else:
             dso_mean = 0
-    else:
-        dso_mean = 0
-        sales_paid_valid = pd.DataFrame()
-    
-    # DPO - Vérifier les dates invalides correctement
-    purchase_paid = purchase[purchase['status'] == 'Paid'].copy()
-    if len(purchase_paid) > 0:
-        # Calculer days_to_pay pour toutes les factures (même si certaines dates sont manquantes)
-        purchase_paid['has_valid_dates'] = purchase_paid['payment_date'].notna() & purchase_paid['issue_date'].notna()
-        # Calculer days_to_pay seulement pour les factures avec dates valides
-        purchase_paid.loc[purchase_paid['has_valid_dates'], 'days_to_pay'] = (
-            purchase_paid.loc[purchase_paid['has_valid_dates'], 'payment_date'] - 
-            purchase_paid.loc[purchase_paid['has_valid_dates'], 'issue_date']
-        ).dt.days
         
-        purchase_paid_valid = purchase_paid[purchase_paid['has_valid_dates']].copy()
-        if len(purchase_paid_valid) > 0:
-            dpo_mean = purchase_paid_valid['days_to_pay'].mean()
+        # DPO
+        purchase_paid = purchase[purchase['status'] == 'Paid'].copy()
+        if len(purchase_paid) > 0:
+            purchase_paid['has_valid_dates'] = purchase_paid['payment_date'].notna() & purchase_paid['issue_date'].notna()
+            purchase_paid.loc[purchase_paid['has_valid_dates'], 'days_to_pay'] = (
+                purchase_paid.loc[purchase_paid['has_valid_dates'], 'payment_date'] - 
+                purchase_paid.loc[purchase_paid['has_valid_dates'], 'issue_date']
+            ).dt.days
+            purchase_paid_valid = purchase_paid[purchase_paid['has_valid_dates']].copy()
+            dpo_mean = purchase_paid_valid['days_to_pay'].mean() if len(purchase_paid_valid) > 0 else 0
         else:
             dpo_mean = 0
+        
+        return bank_clean, dso_mean, dpo_mean
+    
+    # Calculer seulement si pas déjà fait
+    if 'metrics_calculated' not in st.session_state:
+        bank, dso_mean, dpo_mean = calculate_base_metrics(bank, sales, purchase)
+        st.session_state.bank = bank
+        st.session_state.dso_mean = dso_mean
+        st.session_state.dpo_mean = dpo_mean
+        st.session_state.metrics_calculated = True
     else:
-        dpo_mean = 0
-        purchase_paid_valid = pd.DataFrame()
+        bank = st.session_state.bank
+        dso_mean = st.session_state.dso_mean
+        dpo_mean = st.session_state.dpo_mean
     
     # Sections du dashboard
     if section == "🏠 Vue d'ensemble":
