@@ -1,9 +1,0 @@
-======================================================================
-RAPPORT COMPLET CASH FORECASTING
-======================================================================
-
-Date de départ forecast: 2025-01-01
-
-1. MÉTRIQUES CLÉS
-   DSO moyen: 55.5 jours
-   DPO moyen: 56.8 jours
