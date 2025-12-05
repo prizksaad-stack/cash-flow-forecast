@@ -1296,7 +1296,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
             
             **D. Gestion des comptes**
             - Comptes par devise :
-              - EUR_Operating, EUR_Payroll (EUR)
+              - EUR_Operating (EUR) - Note: EUR_Payroll exclu (compte miroir)
               - USD_Sales (USD)
               - JPY_Sales (JPY)
             - Soldes calculés et affichés par compte et devise
@@ -1641,10 +1641,15 @@ dso_mean = sales_paid['days_to_pay'].mean()
                     ageing_pivot = pd.DataFrame()
                 
                 # Synthèse par client (ouvert/overdue)
+                def sum_open(group):
+                    return group[group['status'].isin(['Open', 'Overdue'])]['amount'].sum()
+                def sum_overdue(group):
+                    return group[group['status'] == 'Overdue']['amount'].sum()
+                
                 synth = sales.groupby(client_col).agg(
                     montant_total=('amount', 'sum'),
-                    montant_ouvert=('amount', lambda x: sales.loc[x.index][sales.loc[x.index, 'status'].isin(['Open','Overdue'])]['amount'].sum()),
-                    montant_overdue=('amount', lambda x: sales.loc[x.index][sales.loc[x.index, 'status']=='Overdue']['amount'].sum())
+                    montant_ouvert=('amount', sum_open),
+                    montant_overdue=('amount', sum_overdue)
                 ).reset_index()
                 
                 # Joindre DSO client
