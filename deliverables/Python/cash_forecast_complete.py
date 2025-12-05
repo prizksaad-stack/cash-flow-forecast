@@ -3151,6 +3151,9 @@ for day in range(forecast_days_count):
                 days_negative = len(forecast_results['forecast_df'][forecast_results['forecast_df']['Cumul_Total_EUR'] < 0])
                 days_critical = len(forecast_results['forecast_df'][forecast_results['forecast_df']['Cumul_Total_EUR'] < -100000])
                 days_warning = len(forecast_results['forecast_df'][(forecast_results['forecast_df']['Cumul_Total_EUR'] < 0) & (forecast_results['forecast_df']['Cumul_Total_EUR'] >= -100000)])
+                # Pour affichage de la liquidité (cash disponible uniquement)
+                days_warning_cash = days_warning
+                days_critical_cash = days_critical
                 
                 # Afficher les statistiques réelles pour vérification
                 st.markdown("**📊 Vérification des valeurs réelles dans le DataFrame:**")
