@@ -12,8 +12,6 @@ enableCORS = false
 enableXsrfProtection = true
 runOnSave = false
 fileWatcherType = "none"
-healthCheckInterval = 120
-healthCheckTimeout = 120
 
 [browser]
 gatherUsageStats = false

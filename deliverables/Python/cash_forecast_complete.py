@@ -904,7 +904,7 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
         """Prépare les données avec conversion en EUR"""
         bank_copy = bank.copy()
         # Récupérer les taux de change une seule fois
-        fx_rates_dashboard = get_real_exchange_rates(verbose=False)
+        fx_rates_dashboard = get_real_exchange_rates()
         # Convertir amount en EUR selon la devise
         bank_copy['amount_eur'] = bank_copy.apply(
             lambda x: convert_to_eur(x['amount'], x.get('currency', 'EUR'), fx_rates_dashboard, x['date']), 
