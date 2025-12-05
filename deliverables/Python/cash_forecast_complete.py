@@ -849,6 +849,8 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
             "📊 Scénarios & Risques"
         ]
     )
+    # Mode UI léger : désactiver les indicateurs de progression trop visibles
+    show_dev_indicators = st.sidebar.checkbox("Afficher indicateurs de progression (dev)", False)
     
     @st.cache_data
     def load_data():
@@ -880,8 +882,9 @@ if STREAMLIT_MODE and IS_STREAMLIT_RUN and not SCRIPT_MODE:
             sales = pd.read_csv(sales_path, parse_dates=['issue_date', 'due_date', 'payment_date'])
             purchase = pd.read_csv(purchase_path, parse_dates=['issue_date', 'due_date', 'payment_date'])
             
-            st.success(f"✅ Données chargées avec succès!")
-            st.info(f"📊 {len(bank)} transactions bancaires, {len(sales)} factures clients, {len(purchase)} factures fournisseurs")
+            if show_dev_indicators:
+                st.success(f"✅ Données chargées avec succès!")
+                st.info(f"📊 {len(bank)} transactions bancaires, {len(sales)} factures clients, {len(purchase)} factures fournisseurs")
             
             return bank, sales, purchase
         except Exception as e:
@@ -1600,6 +1603,74 @@ dso_mean = sales_paid['days_to_pay'].mean()
                 st.plotly_chart(fig, width='stretch')
             else:
                 st.warning("Pas de données valides pour afficher le graphique")
+        
+        elif variable == "Analyse poste client (DSO par client)":
+            st.markdown("### 🧾 Analyse poste client (DSO par client, ageing, crédit)")
+            
+            # Identifier la colonne client
+            client_cols = [c for c in ['customer', 'client', 'counterparty'] if c in sales.columns]
+            client_col = client_cols[0] if client_cols else None
+            
+            if client_col is None:
+                st.warning("⚠️ Impossible d'identifier la colonne client (attendu: customer/client/counterparty).")
+            else:
+                today = pd.Timestamp.today().date()
+                
+                # DSO par client (factures payées)
+                paid = sales[sales['status'] == 'Paid'].copy()
+                if len(paid) > 0 and 'issue_date' in paid.columns and 'payment_date' in paid.columns:
+                    paid['days_to_pay'] = (paid['payment_date'] - paid['issue_date']).dt.days
+                    dso_client = paid.groupby(client_col)['days_to_pay'].mean().reset_index().rename(columns={'days_to_pay': 'DSO_moyen'})
+                else:
+                    dso_client = pd.DataFrame(columns=[client_col, 'DSO_moyen'])
+                
+                # Ageing des factures ouvertes
+                open_inv = sales[sales['status'].isin(['Open', 'Overdue'])].copy()
+                if len(open_inv) > 0 and 'due_date' in open_inv.columns:
+                    open_inv['days_overdue'] = (today - open_inv['due_date'].dt.date).apply(lambda x: x.days if pd.notnull(x) else 0)
+                    def bucket(d):
+                        if d < 0: return "Pas échu"
+                        if d <= 30: return "0-30j"
+                        if d <= 60: return "31-60j"
+                        if d <= 90: return "61-90j"
+                        return ">90j"
+                    open_inv['bucket'] = open_inv['days_overdue'].apply(bucket)
+                    ageing = open_inv.groupby([client_col, 'bucket'])['amount'].sum().reset_index()
+                    ageing_pivot = ageing.pivot(index=client_col, columns='bucket', values='amount').fillna(0)
+                else:
+                    ageing_pivot = pd.DataFrame()
+                
+                # Synthèse par client (ouvert/overdue)
+                synth = sales.groupby(client_col).agg(
+                    montant_total=('amount', 'sum'),
+                    montant_ouvert=('amount', lambda x: sales.loc[x.index][sales.loc[x.index, 'status'].isin(['Open','Overdue'])]['amount'].sum()),
+                    montant_overdue=('amount', lambda x: sales.loc[x.index][sales.loc[x.index, 'status']=='Overdue']['amount'].sum())
+                ).reset_index()
+                
+                # Joindre DSO client
+                if len(dso_client) > 0:
+                    synth = synth.merge(dso_client, on=client_col, how='left')
+                else:
+                    synth['DSO_moyen'] = 0
+                
+                # Top expositions
+                synth = synth.sort_values('montant_ouvert', ascending=False)
+                
+                st.markdown("#### 📊 Top clients (montant ouvert)")
+                cols_display = [client_col, 'montant_total', 'montant_ouvert', 'montant_overdue', 'DSO_moyen']
+                st.dataframe(synth[cols_display].head(10), use_container_width=True)
+                
+                st.markdown("#### 🧮 DSO moyen par client (factures payées)")
+                if len(dso_client) > 0:
+                    st.dataframe(dso_client.sort_values('DSO_moyen', ascending=False), use_container_width=True)
+                else:
+                    st.info("Pas de factures payées disponibles pour calculer le DSO par client.")
+                
+                st.markdown("#### ⏳ Ageing des factures ouvertes (par client)")
+                if len(ageing_pivot) > 0:
+                    st.dataframe(ageing_pivot, use_container_width=True)
+                else:
+                    st.info("Pas de factures ouvertes/échues pour l'ageing.")
         
         elif variable == "DPO (Days Payable Outstanding)" and len(purchase_paid) > 0:
             st.markdown("### 📊 Calcul du DPO")
